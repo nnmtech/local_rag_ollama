@@ -352,6 +352,30 @@ def ingest_from_imap(
     msg_ids = [x for x in (data[0] or b"").split() if x]
     saved = 0
     questions: list[str] = []
+
+    def _extract_questions_from_lines(text: str) -> list[str]:
+        out: list[str] = []
+        for line in (text or "").splitlines():
+            s = line.strip()
+            if not s:
+                continue
+            upper = s.upper()
+            if upper.startswith("Q:"):
+                q = s[2:].strip()
+                if q:
+                    out.append(q)
+            elif upper.startswith("QUESTION:"):
+                q = s[len("QUESTION:") :].strip()
+                if q:
+                    out.append(q)
+        return out
+
+    def _dedupe_append_many(dst: list[str], items: list[str]) -> None:
+        existing = set(dst)
+        for item in items:
+            if item not in existing:
+                dst.append(item)
+                existing.add(item)
     for msg_id in msg_ids:
         typ, msg_data = imap.fetch(msg_id, "(RFC822)")
         if typ != "OK" or not msg_data:
@@ -365,18 +389,9 @@ def ingest_from_imap(
 
         extracted_any = False
 
-        # Trigger rule: subject prefixes indicate an ask.
-        # Example: "Q: what is this email about?" or "QUESTION: ..."
-        subj_norm = subject.strip()
-        subj_upper = subj_norm.upper()
-        if subj_upper.startswith("Q:"):
-            q = subj_norm[2:].strip()
-            if q:
-                questions.append(q)
-        elif subj_upper.startswith("QUESTION:"):
-            q = subj_norm[len("QUESTION:") :].strip()
-            if q:
-                questions.append(q)
+        # Trigger rule: subject and/or body lines starting with Q:/QUESTION: indicate an ask.
+        # Example subject: "Q: summarize the attachments"
+        _dedupe_append_many(questions, _extract_questions_from_lines(subject))
 
         if msg.is_multipart():
             for part in msg.walk():
@@ -397,6 +412,7 @@ def ingest_from_imap(
                     payload = part.get_payload(decode=True) or b""
                     text = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
                     if text.strip():
+                        _dedupe_append_many(questions, _extract_questions_from_lines(text))
                         target = out_path / f"{base_name}.txt"
                         target.write_text(
                             f"Subject: {subject}\nDate: {date_hdr}\n\n{text}",
@@ -410,6 +426,7 @@ def ingest_from_imap(
                 payload = msg.get_payload(decode=True) or b""
                 text = payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
                 if text.strip():
+                    _dedupe_append_many(questions, _extract_questions_from_lines(text))
                     target = out_path / f"{base_name}.txt"
                     target.write_text(
                         f"Subject: {subject}\nDate: {date_hdr}\n\n{text}",
