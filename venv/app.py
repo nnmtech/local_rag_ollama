@@ -333,7 +333,7 @@ def ingest_from_imap(
     mailbox: str = "INBOX",
     subject_contains: str | None = None,
     mark_seen: bool = True,
-) -> int:
+) -> tuple[int, list[str]]:
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -351,6 +351,7 @@ def ingest_from_imap(
 
     msg_ids = [x for x in (data[0] or b"").split() if x]
     saved = 0
+    questions: list[str] = []
     for msg_id in msg_ids:
         typ, msg_data = imap.fetch(msg_id, "(RFC822)")
         if typ != "OK" or not msg_data:
@@ -363,6 +364,19 @@ def ingest_from_imap(
         base_name = f"email_{msg_id.decode(errors='ignore')}_{int(time.time())}"
 
         extracted_any = False
+
+        # Trigger rule: subject prefixes indicate an ask.
+        # Example: "Q: what is this email about?" or "QUESTION: ..."
+        subj_norm = subject.strip()
+        subj_upper = subj_norm.upper()
+        if subj_upper.startswith("Q:"):
+            q = subj_norm[2:].strip()
+            if q:
+                questions.append(q)
+        elif subj_upper.startswith("QUESTION:"):
+            q = subj_norm[len("QUESTION:") :].strip()
+            if q:
+                questions.append(q)
 
         if msg.is_multipart():
             for part in msg.walk():
@@ -408,7 +422,7 @@ def ingest_from_imap(
             imap.store(msg_id, "+FLAGS", "\\Seen")
 
     imap.logout()
-    return saved
+    return saved, questions
 
 
 def watch_imap_and_index() -> None:
@@ -426,7 +440,7 @@ def watch_imap_and_index() -> None:
     print(f"Watching IMAP inbox: host={host} user={user} mailbox={mailbox} out_dir={out_dir}")
     while True:
         try:
-            saved = ingest_from_imap(
+            saved, questions = ingest_from_imap(
                 out_dir=out_dir,
                 host=host,
                 user=user,
@@ -439,6 +453,13 @@ def watch_imap_and_index() -> None:
                 print(f"Saved {saved} email-derived .txt files; indexing...")
                 upserted = index_directory("./news_articles", incremental=True)
                 print(f"Indexed {upserted} new/updated chunks")
+
+            # If the email subject asked a question (Q: / QUESTION:), answer it.
+            # This uses the current index, which includes newly-ingested files.
+            for q in questions:
+                print("\n=== Email-triggered RAG Query: " + q + " ===")
+                retrieved = query_documents_with_sources(q, n_results=2)
+                print(generate_response_with_sources(q, retrieved))
         except Exception as e:
             print(f"[watch_email] Error: {e}")
         time.sleep(max(5, poll_seconds))

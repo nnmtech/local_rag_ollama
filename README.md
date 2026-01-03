@@ -37,6 +37,10 @@ Common commands:
 ./venv/bin/python venv/app.py --watch-email
 ```
 
+Email-triggered questions:
+- If the email subject starts with `Q:` or `QUESTION:`, the script will automatically run a RAG query after ingest+index.
+   - Example subject: `Q: summarize the attached articles`
+
 Note: `venv/app.py` is designed to be run as a script (it now has a `main()` guard). If you import it from other modules, call `main()` explicitly.
 
 What the script does
