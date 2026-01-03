@@ -21,7 +21,23 @@ From the repository root run:
 ./venv/bin/python venv/app.py
 ```
 
-Note: `venv/app.py` executes indexing + queries at import time (no `if __name__ == "__main__"` guard). Avoid importing it from other Python modules unless you intend it to run.
+Common commands:
+
+```bash
+# Index local files (one-shot)
+./venv/bin/python venv/app.py --index
+
+# Ask a question using the existing index
+./venv/bin/python venv/app.py --ask "tell me about databricks" --n-results 2
+
+# Watch a directory for new/changed .txt files and index incrementally
+./venv/bin/python venv/app.py --watch-dir ./news_articles
+
+# Poll an IMAP inbox for unseen mail, save .txt locally, then index
+./venv/bin/python venv/app.py --watch-email
+```
+
+Note: `venv/app.py` is designed to be run as a script (it now has a `main()` guard). If you import it from other modules, call `main()` explicitly.
 
 What the script does
 ---------------------
@@ -38,6 +54,13 @@ Environment variables
 - `OLLAMA_EMBED_MODEL` (optional) — embedding model (default `nomic-embed-text:latest`).
 - `CHROMA_COLLECTION` (optional) — overrides the collection name; defaults to `rag_{OLLAMA_EMBED_MODEL}` (sanitized) to avoid dimension mismatch when switching embedding models.
 - `DEBUG=1` or `PERPLEXITY_DEBUG=1` (optional) — prints HTTP payloads/responses (can be large; may include full prompts/retrieved context).
+
+Email ingestion (optional, for `--watch-email`):
+- `EMAIL_IMAP_HOST`, `EMAIL_IMAP_USER`, `EMAIL_IMAP_PASSWORD` (required)
+- `EMAIL_IMAP_MAILBOX` (optional, default `INBOX`)
+- `EMAIL_SUBJECT_FILTER` (optional; only ingest mail whose subject contains this)
+- `EMAIL_OUT_DIR` (optional, default `./news_articles/email_inbox`)
+- `EMAIL_POLL_SECONDS` (optional, default `30`)
 
 Notes & best practices
 ----------------------
