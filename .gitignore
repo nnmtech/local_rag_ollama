@@ -1,0 +1,25 @@
+.env
+
+# Env files can exist under venv/; ensure they never get committed.
+venv/.env
+
+# Local Chroma persistence (generated, can be large / machine-specific)
+chroma_persistent_storage/
+
+# Downloaded webpage assets (not used by the loader; repo bloat)
+news_articles/rag-intro-chat-with-docs_news_articles*
+
+# Local backups (keep out of repos)
+*.tar.gz
+*.SHA256
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment contents (keep the demo source file)
+venv/*
+!venv/app.py
+!venv/.gitignore
+
+# Never commit local env files (contain secrets)
+venv/.env
